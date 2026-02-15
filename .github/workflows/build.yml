@@ -35,15 +35,15 @@ jobs:
       - name: Set unique release tag
         id: tag
         shell: pwsh
+        env:
+          GH_TOKEN: ${{ secrets.GH_PAT }}  # <-- required for gh CLI auth
         run: |
           $date = Get-Date -Format "yyyy.MM.dd"
-          # Get existing releases with same date
           $existing = gh release list --limit 100 --json tagName | ConvertFrom-Json | Where-Object { $_.tagName -like "$date*" }
           $rev = ($existing.Count + 1)
           $tag = if ($rev -gt 1) { "$date.$rev" } else { $date }
           echo "RELEASE_TAG=$tag" >> $env:GITHUB_ENV
           Write-Host "Release tag set to $tag"
-
       # 5️⃣ Create GitHub Release
       - name: Create GitHub Release
         id: create_release
