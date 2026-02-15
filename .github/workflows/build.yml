@@ -18,7 +18,7 @@ jobs:
       - name: Checkout repository
         uses: actions/checkout@v5
 
-      # 2️⃣ Install PS2EXE module
+      # 2️⃣ Install ps2exe module
       - name: Install ps2exe
         shell: pwsh
         run: Install-Module ps2exe -Force -Scope CurrentUser
@@ -31,12 +31,12 @@ jobs:
                         -outputFile "RealtimeSyncStarter.exe" `
                         -noConsole
 
-      # 4️⃣ Generate unique release tag: YYYY.MM.DD + revision
-      - name: Set unique release tag
+      # 4️⃣ Generate unique release tag YYYY.MM.DD + revision
+      - name: Set release tag
         id: tag
         shell: pwsh
         env:
-          GH_TOKEN: ${{ secrets.GH_PAT }}  # <-- required for gh CLI auth
+          GH_TOKEN: ${{ secrets.GH_PAT }}  # required for gh CLI
         run: |
           $date = Get-Date -Format "yyyy.MM.dd"
           $existing = gh release list --limit 100 --json tagName | ConvertFrom-Json | Where-Object { $_.tagName -like "$date*" }
@@ -44,28 +44,21 @@ jobs:
           $tag = if ($rev -gt 1) { "$date.$rev" } else { $date }
           echo "RELEASE_TAG=$tag" >> $env:GITHUB_ENV
           Write-Host "Release tag set to $tag"
-      # 5️⃣ Create GitHub Release
-      - name: Create GitHub Release
-        id: create_release
+
+      # 5️⃣ Create GitHub release + upload EXE in a single step
+      - name: Create GitHub Release & Upload EXE
         uses: softprops/action-gh-release@v2
         with:
           tag_name: ${{ env.RELEASE_TAG }}
           name: Release ${{ env.RELEASE_TAG }}
+          files: RealtimeSyncStarter.exe
           draft: false
           prerelease: false
           overwrite_files: true
-          token: ${{ secrets.GH_PAT }}
+        env:
+          GH_TOKEN: ${{ secrets.GH_PAT }}
 
-      # 6️⃣ Upload EXE to Release
-      - name: Upload EXE to Release
-        uses: softprops/action-gh-release@v2
-        with:
-          tag_name: ${{ env.RELEASE_TAG }}   # <-- REQUIRED
-          files: RealtimeSyncStarter.exe
-          token: ${{ secrets.GH_PAT }}
-          overwrite_files: true
-
-      # 7️⃣ Output commit hash for reference
+      # 6️⃣ Show commit SHA for reference
       - name: Show commit SHA
         shell: pwsh
-        run: Write-Host $env:GITHUB_SHA
+        run: Write-Host "Current commit SHA: $env:GITHUB_SHA"
