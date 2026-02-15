@@ -1,4 +1,4 @@
-name: Build EXE
+name: Build EXE & Release
 
 on:
   push:
@@ -6,21 +6,32 @@ on:
   workflow_dispatch:
 
 jobs:
-  build:
+  build-and-release:
     runs-on: windows-latest
-
     steps:
       - name: Checkout code
         uses: actions/checkout@v5
 
-      - name: Build powershell GUI to EXE
-        run: |
-          Install-Module ps2exe -Force -Scope CurrentUser
-          Invoke-ps2exe -inputFile "RealtimeSyncStarter.ps1" -outputFile "RealtimeSyncStarter.exe" -noConsole
+      - name: Install ps2exe
         shell: pwsh
+        run: Install-Module ps2exe -Force -Scope CurrentUser
 
-      - name: Upload compiled EXE
-        uses: actions/upload-artifact@v4
+      - name: Compile PowerShell GUI to EXE
+        shell: pwsh
+        run: |
+          Invoke-ps2exe -inputFile "RealtimeSyncStarter.ps1" -outputFile "RealtimeSyncStarter.exe" -noConsole
+
+      - name: Create GitHub Release
+        id: create_release
+        uses: softprops/action-gh-release@v2
         with:
-          name: RealtimeSyncStarter
-          path: RealtimeSyncStarter.exe
+          tag_name: "v${{ github.run_number }}"
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Upload EXE to Release
+        uses: softprops/action-gh-release@v2
+        with:
+          files: RealtimeSyncStarter.exe
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
