@@ -1,5 +1,26 @@
 Add-Type -AssemblyName System.Windows.Forms
 Add-Type -AssemblyName System.Drawing
+Add-Type -AssemblyName System.Runtime.InteropServices
+
+# ---------------------------
+# Enable Windows 10/11 Dark Title Bar
+# ---------------------------
+$DWMWA_USE_IMMERSIVE_DARK_MODE = 20
+
+$signature = @"
+using System;
+using System.Runtime.InteropServices;
+public class Dwm {
+    [DllImport("dwmapi.dll", CharSet = CharSet.Auto, SetLastError = true)]
+    public static extern int DwmSetWindowAttribute(
+        IntPtr hwnd,
+        int attr,
+        ref int attrValue,
+        int attrSize);
+}
+"@
+
+Add-Type $signature
 
 # ---------------------------
 # FORM
@@ -7,12 +28,12 @@ Add-Type -AssemblyName System.Drawing
 
 $form = New-Object System.Windows.Forms.Form
 $form.Text = "RealtimeSync Startup Manager"
-$form.Size = New-Object System.Drawing.Size(520,420)
+$form.Size = New-Object System.Drawing.Size(500,420)
 $form.FormBorderStyle = 'FixedDialog'
 $form.MaximizeBox = $false
 $form.StartPosition = 'CenterScreen'
 
-# ---- Dark mode ----
+# Dark colors
 $darkBack  = [System.Drawing.Color]::FromArgb(32,32,32)
 $darkGrid  = [System.Drawing.Color]::FromArgb(45,45,45)
 $darkText  = [System.Drawing.Color]::White
@@ -20,6 +41,17 @@ $buttonBack = [System.Drawing.Color]::FromArgb(60,60,60)
 
 $form.BackColor = $darkBack
 $form.ForeColor = $darkText
+
+# Apply dark title bar when shown
+$form.Add_Shown({
+    $value = 1
+    [Dwm]::DwmSetWindowAttribute(
+        $form.Handle,
+        $DWMWA_USE_IMMERSIVE_DARK_MODE,
+        [ref]$value,
+        4
+    ) | Out-Null
+})
 
 # ---------------------------
 # Startup folder
@@ -33,7 +65,7 @@ $startupFolder = [Environment]::GetFolderPath("Startup")
 
 $grid = New-Object System.Windows.Forms.DataGridView
 $grid.Dock = 'Top'
-$grid.Height = 320
+$grid.Height = 310
 $grid.AllowUserToAddRows = $false
 $grid.SelectionMode = 'FullRowSelect'
 $grid.RowHeadersVisible = $false
@@ -61,32 +93,70 @@ $colRunning.ReadOnly = $true
 $grid.Columns.Add($colRunning)
 
 # ---------------------------
-# BUTTON PANEL
+# BUTTON PANEL (Vertical)
 # ---------------------------
 
 $panel = New-Object System.Windows.Forms.Panel
 $panel.Dock = 'Bottom'
-$panel.Height = 60
+$panel.Height = 80
 $panel.BackColor = $darkBack
 $form.Controls.Add($panel)
 
 $btnAdd = New-Object System.Windows.Forms.Button
 $btnAdd.Text = "Add"
-$btnAdd.Width = 200
-$btnAdd.Left = 30
-$btnAdd.Top = 15
+$btnAdd.Dock = 'Top'
+$btnAdd.Height = 35
 $btnAdd.BackColor = $buttonBack
 $btnAdd.ForeColor = $darkText
 $panel.Controls.Add($btnAdd)
 
 $btnDelete = New-Object System.Windows.Forms.Button
 $btnDelete.Text = "Delete"
-$btnDelete.Width = 200
-$btnDelete.Left = 260
-$btnDelete.Top = 15
+$btnDelete.Dock = 'Top'
+$btnDelete.Height = 35
 $btnDelete.BackColor = $buttonBack
 $btnDelete.ForeColor = $darkText
 $panel.Controls.Add($btnDelete)
+
+# ---------------------------
+# Tray Icon
+# ---------------------------
+
+$trayIcon = New-Object System.Windows.Forms.NotifyIcon
+$trayIcon.Icon = [System.Drawing.SystemIcons]::Application
+$trayIcon.Text = "RealtimeSync Manager"
+$trayIcon.Visible = $false
+
+$trayMenu = New-Object System.Windows.Forms.ContextMenuStrip
+
+$menuOpen = $trayMenu.Items.Add("Open")
+$menuQuit = $trayMenu.Items.Add("Quit")
+
+$trayIcon.ContextMenuStrip = $trayMenu
+
+$menuOpen.Add_Click({
+    $form.Show()
+    $form.WindowState = "Normal"
+})
+
+$menuQuit.Add_Click({
+    $trayIcon.Visible = $false
+    $form.Close()
+})
+
+# Minimize to tray instead of closing
+$form.Add_Resize({
+    if ($form.WindowState -eq "Minimized") {
+        $form.Hide()
+        $trayIcon.Visible = $true
+    }
+})
+
+# Double-click tray to restore
+$trayIcon.Add_DoubleClick({
+    $form.Show()
+    $form.WindowState = "Normal"
+})
 
 # ---------------------------
 # RealtimeSync path
@@ -112,7 +182,7 @@ if (!$realtimeSyncPath) {
 $WScriptShell = New-Object -ComObject WScript.Shell
 
 # ---------------------------
-# Process Detection
+# Process Handling
 # ---------------------------
 
 function Get-RunningProcessForBatch($batchPath) {
@@ -129,9 +199,7 @@ function Start-JobIfNotRunning($batchPath) {
     $proc = Get-RunningProcessForBatch $batchPath
     if (-not $proc) {
         Start-Process $realtimeSyncPath -ArgumentList "`"$batchPath`""
-        return $true
     }
-    return $true
 }
 
 function Stop-Job($batchPath) {
@@ -146,6 +214,7 @@ function Stop-Job($batchPath) {
 # ---------------------------
 
 function RefreshGrid {
+
     $grid.Rows.Clear()
 
     Get-ChildItem $startupFolder -Filter "*-RealtimeSync.lnk" | ForEach-Object {
@@ -154,17 +223,16 @@ function RefreshGrid {
         $batchFile = $shortcut.Arguments.Trim('"')
 
         $name = [System.IO.Path]::GetFileNameWithoutExtension($_.Name) -replace '-RealtimeSync$',''
-        $row = $grid.Rows.Add($name, $false)
+        $rowIndex = $grid.Rows.Add($name, $false)
 
         $proc = Get-RunningProcessForBatch $batchFile
 
         if ($proc) {
-            $grid.Rows[$row].Cells["Running"].Value = $true
+            $grid.Rows[$rowIndex].Cells["Running"].Value = $true
         }
         else {
-            # Auto restart if crashed
             Start-JobIfNotRunning $batchFile
-            $grid.Rows[$row].Cells["Running"].Value = $true
+            $grid.Rows[$rowIndex].Cells["Running"].Value = $true
         }
     }
 }
@@ -227,7 +295,7 @@ $btnDelete.Add_Click({
 })
 
 # ---------------------------
-# Auto Refresh Timer (detect crash)
+# Crash Detection Timer
 # ---------------------------
 
 $timer = New-Object System.Windows.Forms.Timer
