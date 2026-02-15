@@ -1,36 +1,59 @@
 name: Build EXE & Release
 
+# Trigger workflow on push to main or manual dispatch
 on:
   push:
     branches: [ main ]
   workflow_dispatch:
 
+# Explicit workflow permissions
+permissions:
+  contents: write
+  actions: write
+
 jobs:
   build-and-release:
     runs-on: windows-latest
+
     steps:
-      - name: Checkout code
+      # 1️⃣ Checkout repository
+      - name: Checkout repository
         uses: actions/checkout@v5
 
+      # 2️⃣ Install PS2EXE module
       - name: Install ps2exe
         shell: pwsh
         run: Install-Module ps2exe -Force -Scope CurrentUser
 
-      - name: Compile PowerShell GUI to EXE
+      # 3️⃣ Compile PowerShell GUI to EXE
+      - name: Build EXE
         shell: pwsh
         run: |
-          Invoke-ps2exe -inputFile "RealtimeSyncStarter.ps1" -outputFile "RealtimeSyncStarter.exe" -noConsole
-          
+          Invoke-ps2exe -inputFile "RealtimeSyncStarter.ps1" `
+                        -outputFile "RealtimeSyncStarter.exe" `
+                        -noConsole
+
+      # 4️⃣ Determine release tag (auto-increment with run_number)
+      - name: Set release tag
+        id: tag
+        run: |
+          echo "RELEASE_TAG=v${{ github.run_number }}" >> $GITHUB_ENV
+
+      # 5️⃣ Create GitHub Release using PAT
       - name: Create GitHub Release
         id: create_release
         uses: softprops/action-gh-release@v2
         with:
-          tag_name: "v${{ github.run_number }}"
+          tag_name: ${{ env.RELEASE_TAG }}
+          name: Release ${{ env.RELEASE_TAG }}
+          draft: false
+          prerelease: false
           overwrite_files: true
-          token: ${{ secrets.GH_PAT }}  # <-- Use PAT here
-      
+          token: ${{ secrets.GH_PAT }}   # <-- MUST be a PAT with repo scope
+
+      # 6️⃣ Upload EXE to Release
       - name: Upload EXE to Release
         uses: softprops/action-gh-release@v2
         with:
           files: RealtimeSyncStarter.exe
-          token: ${{ secrets.GH_PAT }}  # <-- Use same PAT
+          token: ${{ secrets.GH_PAT }}
