@@ -1,12 +1,10 @@
 name: Build EXE & Release
 
-# Trigger workflow on push to main or manual dispatch
 on:
   push:
     branches: [ main ]
   workflow_dispatch:
 
-# Explicit workflow permissions
 permissions:
   contents: write
   actions: write
@@ -25,7 +23,7 @@ jobs:
         shell: pwsh
         run: Install-Module ps2exe -Force -Scope CurrentUser
 
-      # 3️⃣ Compile PowerShell GUI to EXE
+      # 3️⃣ Build PowerShell GUI to EXE
       - name: Build EXE
         shell: pwsh
         run: |
@@ -33,13 +31,15 @@ jobs:
                         -outputFile "RealtimeSyncStarter.exe" `
                         -noConsole
 
-      # 4️⃣ Determine release tag (auto-increment with run_number)
+      # 4️⃣ Generate release tag: YYYY.MM.DD
       - name: Set release tag
         id: tag
+        shell: pwsh
         run: |
-          echo "RELEASE_TAG=v${{ github.run_number }}" >> $GITHUB_ENV
+          $date = Get-Date -Format "yyyy.MM.dd"
+          echo "RELEASE_TAG=$date" >> $env:GITHUB_ENV
 
-      # 5️⃣ Create GitHub Release using PAT
+      # 5️⃣ Create GitHub Release
       - name: Create GitHub Release
         id: create_release
         uses: softprops/action-gh-release@v2
@@ -49,7 +49,7 @@ jobs:
           draft: false
           prerelease: false
           overwrite_files: true
-          token: ${{ secrets.GH_PAT }}   # <-- MUST be a PAT with repo scope
+          token: ${{ secrets.GH_PAT }}
 
       # 6️⃣ Upload EXE to Release
       - name: Upload EXE to Release
@@ -57,3 +57,7 @@ jobs:
         with:
           files: RealtimeSyncStarter.exe
           token: ${{ secrets.GH_PAT }}
+
+      # 7️⃣ Output commit hash for reference
+      - name: Show commit SHA
+        run: echo "Current commit SHA: $GITHUB_SHA"
