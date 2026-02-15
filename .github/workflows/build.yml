@@ -60,8 +60,10 @@ jobs:
       - name: Upload EXE to Release
         uses: softprops/action-gh-release@v2
         with:
+          tag_name: ${{ env.RELEASE_TAG }}   # <-- REQUIRED
           files: RealtimeSyncStarter.exe
           token: ${{ secrets.GH_PAT }}
+          overwrite_files: true
 
       # 7️⃣ Output commit hash for reference
       - name: Show commit SHA
