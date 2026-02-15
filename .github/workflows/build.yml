@@ -61,4 +61,5 @@ jobs:
       # 6️⃣ Show commit SHA for reference
       - name: Show commit SHA
         shell: pwsh
-        run: Write-Host "Current commit SHA: $env:GITHUB_SHA"
+        run: |
+          Write-Host "Current commit SHA: $env:GITHUB_SHA"
