@@ -31,13 +31,18 @@ jobs:
                         -outputFile "RealtimeSyncStarter.exe" `
                         -noConsole
 
-      # 4️⃣ Generate release tag: YYYY.MM.DD
-      - name: Set release tag
+      # 4️⃣ Generate unique release tag: YYYY.MM.DD + revision
+      - name: Set unique release tag
         id: tag
         shell: pwsh
         run: |
           $date = Get-Date -Format "yyyy.MM.dd"
-          echo "RELEASE_TAG=$date" >> $env:GITHUB_ENV
+          # Get existing releases with same date
+          $existing = gh release list --limit 100 --json tagName | ConvertFrom-Json | Where-Object { $_.tagName -like "$date*" }
+          $rev = ($existing.Count + 1)
+          $tag = if ($rev -gt 1) { "$date.$rev" } else { $date }
+          echo "RELEASE_TAG=$tag" >> $env:GITHUB_ENV
+          Write-Host "Release tag set to $tag"
 
       # 5️⃣ Create GitHub Release
       - name: Create GitHub Release
@@ -60,4 +65,5 @@ jobs:
 
       # 7️⃣ Output commit hash for reference
       - name: Show commit SHA
-        run: echo "Current commit SHA: $GITHUB_SHA"
+        shell: pwsh
+        run: Write-Host $env:GITHUB_SHA
